@@ -2,9 +2,23 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { PwaMetadata, AppConfig, BuildResult } from "./types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Netlify वर process.env न मिळाल्यास ॲप क्रॅश होऊ नये म्हणून हा बदल
+const getApiKey = () => {
+  try {
+    return process.env.API_KEY || "";
+  } catch (e) {
+    console.warn("API Key environment variable not found.");
+    return "";
+  }
+};
 
 export const analyzePwaUrl = async (url: string): Promise<PwaMetadata> => {
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    throw new Error("API Key उपलब्ध नाही. कृपया Netlify Settings मध्ये API_KEY सेट करा.");
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
   const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
     contents: `Analyze the PWA at this URL: ${url}. 
@@ -42,6 +56,9 @@ export const analyzePwaUrl = async (url: string): Promise<PwaMetadata> => {
 };
 
 export const generateAndroidProject = async (config: AppConfig, pwa: PwaMetadata): Promise<BuildResult> => {
+  const apiKey = getApiKey();
+  const ai = new GoogleGenAI({ apiKey });
+  
   const response = await ai.models.generateContent({
     model: "gemini-3-pro-preview",
     contents: `Create a Trusted Web Activity (TWA) Android project configuration for:
