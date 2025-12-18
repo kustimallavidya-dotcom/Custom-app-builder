@@ -13,7 +13,9 @@ import {
   CheckCircle2, 
   AlertCircle,
   Globe,
-  Code
+  Code,
+  Key,
+  ExternalLink
 } from 'lucide-react';
 import { BuildStep, PwaMetadata, AppConfig, BuildResult } from './types';
 import { analyzePwaUrl, generateAndroidProject } from './geminiService';
@@ -23,6 +25,7 @@ const App: React.FC = () => {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isApiKeyMissing, setIsApiKeyMissing] = useState(false);
   const [pwaMetadata, setPwaMetadata] = useState<PwaMetadata | null>(null);
   const [appConfig, setAppConfig] = useState<AppConfig>({
     appName: '',
@@ -37,8 +40,10 @@ const App: React.FC = () => {
   const [buildResult, setBuildResult] = useState<BuildResult | null>(null);
   const [history, setHistory] = useState<BuildResult[]>([]);
 
-  // Local storage for history
   useEffect(() => {
+    if (!process.env.API_KEY) {
+      setIsApiKeyMissing(true);
+    }
     const saved = localStorage.getItem('pwa_build_history');
     if (saved) setHistory(JSON.parse(saved));
   }, []);
@@ -63,7 +68,11 @@ const App: React.FC = () => {
       }));
       setCurrentStep(BuildStep.APP_CONFIG);
     } catch (err: any) {
-      setError(err.message || 'काहीतरी चूक झाली. पुन्हा प्रयत्न करा. (Something went wrong)');
+      if (err.message === "API_KEY_MISSING") {
+        setIsApiKeyMissing(true);
+      } else {
+        setError(err.message || 'काहीतरी चूक झाली. पुन्हा प्रयत्न करा.');
+      }
     } finally {
       setLoading(false);
     }
@@ -79,14 +88,68 @@ const App: React.FC = () => {
       setHistory(newHistory);
       localStorage.setItem('pwa_build_history', JSON.stringify(newHistory));
       setCurrentStep(BuildStep.EXPORT);
-    } catch (err) {
-      setError('बिल्ड प्रक्रियेत त्रुटी आली. (Build process failed)');
-      setCurrentStep(BuildStep.APP_CONFIG);
+    } catch (err: any) {
+      if (err.message === "API_KEY_MISSING") {
+        setIsApiKeyMissing(true);
+      } else {
+        setError('बिल्ड प्रक्रियेत त्रुटी आली.');
+        setCurrentStep(BuildStep.APP_CONFIG);
+      }
     } finally {
       setLoading(false);
     }
   };
 
+  // Setup Guide for Netlify API Key
+  if (isApiKeyMissing) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+        <div className="max-w-2xl w-full bg-white rounded-3xl shadow-2xl overflow-hidden border border-gray-100">
+          <div className="bg-amber-500 p-8 text-white flex items-center gap-6">
+            <div className="p-4 bg-white/20 rounded-2xl">
+              <Key className="w-10 h-10" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold marathi">API Key कॉन्फिगरेशन आवश्यक</h1>
+              <p className="opacity-90">Netlify वर API Key सेट करणे आवश्यक आहे.</p>
+            </div>
+          </div>
+          
+          <div className="p-8 space-y-6">
+            <div className="space-y-4">
+              <h2 className="text-lg font-bold text-gray-800 marathi underline">कसे सेट करावे? (How to Set):</h2>
+              <ol className="list-decimal list-inside space-y-3 text-gray-700 marathi">
+                <li>तुमच्या <strong>Netlify Dashboard</strong> वर जा.</li>
+                <li>तुमचा ॲप निवडा आणि <strong>'Site Configuration'</strong> वर क्लिक करा.</li>
+                <li>डाव्या बाजूला <strong>'Environment variables'</strong> निवडा.</li>
+                <li><strong>'Add a variable'</strong> बटनावर क्लिक करा.</li>
+                <li>Key मध्ये <code className="bg-gray-100 px-2 py-1 rounded font-mono text-pink-600">API_KEY</code> लिहा.</li>
+                <li>Value मध्ये तुमची <strong>Gemini API Key</strong> पेस्ट करा.</li>
+                <li>'Create' करा आणि त्यानंतर <strong>Deploys</strong> मध्ये जाऊन पुन्हा एकदा <strong>'Deploy site'</strong> करा.</li>
+              </ol>
+            </div>
+
+            <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-blue-500 mt-0.5" />
+              <p className="text-sm text-blue-800 marathi italic">टीप: कोडमध्ये थेट की टाकणे सुरक्षित नसते, म्हणून ही पद्धत सर्वोत्तम आहे.</p>
+            </div>
+
+            <a 
+              href="https://app.netlify.com/" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="w-full py-4 bg-gray-900 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-gray-800 transition-colors"
+            >
+              <ExternalLink className="w-5 h-5" />
+              <span className="marathi">Netlify डॅशबोर्डवर जा</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // --- Start of Main UI Renders ---
   const renderWelcome = () => (
     <div className="max-w-4xl mx-auto text-center mt-20">
       <div className="mb-8 inline-block p-4 bg-indigo-100 rounded-full">
@@ -98,9 +161,9 @@ const App: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <button 
           onClick={() => setCurrentStep(BuildStep.URL_INPUT)}
-          className="flex items-center justify-between p-6 bg-white border-2 border-indigo-500 rounded-2xl shadow-sm hover:shadow-md transition-all group"
+          className="flex items-center justify-between p-6 bg-white border-2 border-indigo-500 rounded-2xl shadow-sm hover:shadow-md transition-all group text-left"
         >
-          <div className="text-left">
+          <div>
             <h3 className="text-xl font-semibold text-gray-900 marathi">नवीन ॲप तयार करा</h3>
             <p className="text-sm text-gray-500">Create New App</p>
           </div>
@@ -108,10 +171,10 @@ const App: React.FC = () => {
         </button>
 
         <button 
-          onClick={() => {/* View History Logic */}}
-          className="flex items-center justify-between p-6 bg-white border-2 border-gray-200 rounded-2xl shadow-sm hover:border-indigo-200 transition-all group"
+          onClick={() => {}} 
+          className="flex items-center justify-between p-6 bg-white border-2 border-gray-200 rounded-2xl shadow-sm hover:border-indigo-200 transition-all group text-left"
         >
-          <div className="text-left">
+          <div>
             <h3 className="text-xl font-semibold text-gray-900 marathi">मागील बिल्ड्स</h3>
             <p className="text-sm text-gray-500">Build History</p>
           </div>
@@ -167,7 +230,7 @@ const App: React.FC = () => {
   );
 
   const renderAppConfig = () => (
-    <div className="max-w-4xl mx-auto mt-12 mb-20">
+    <div className="max-w-4xl mx-auto mt-12 mb-20 px-4">
       <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-100">
         <div className="bg-indigo-600 px-8 py-6 text-white flex justify-between items-center">
           <div>
@@ -187,7 +250,7 @@ const App: React.FC = () => {
                 type="text" 
                 value={appConfig.appName}
                 onChange={(e) => setAppConfig({...appConfig, appName: e.target.value})}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
               />
             </div>
             <div>
@@ -196,7 +259,7 @@ const App: React.FC = () => {
                 type="text" 
                 value={appConfig.packageName}
                 onChange={(e) => setAppConfig({...appConfig, packageName: e.target.value})}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 font-mono text-sm outline-none"
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -206,7 +269,7 @@ const App: React.FC = () => {
                   type="number" 
                   value={appConfig.versionCode}
                   onChange={(e) => setAppConfig({...appConfig, versionCode: parseInt(e.target.value)})}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
                 />
               </div>
               <div>
@@ -215,14 +278,14 @@ const App: React.FC = () => {
                   type="text" 
                   value={appConfig.versionName}
                   onChange={(e) => setAppConfig({...appConfig, versionName: e.target.value})}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
                 />
               </div>
             </div>
           </div>
 
           <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200">
-            <h3 className="font-semibold mb-4 marathi">देखावा आणि ओरिएंटेशन</h3>
+            <h3 className="font-semibold mb-4 marathi text-gray-800">देखावा आणि ओरिएंटेशन</h3>
             <div className="space-y-6">
               <div>
                 <label className="block text-sm text-gray-600 mb-2 marathi">ॲप आयकॉन प्रिव्ह्यू</label>
@@ -259,13 +322,13 @@ const App: React.FC = () => {
         <div className="px-8 py-6 bg-gray-50 border-t border-gray-100 flex justify-between">
           <button 
             onClick={() => setCurrentStep(BuildStep.URL_INPUT)}
-            className="px-6 py-2 text-gray-600 font-medium marathi"
+            className="px-6 py-2 text-gray-600 font-medium marathi hover:text-gray-900 transition-colors"
           >
             मागे जा (Back)
           </button>
           <button 
             onClick={() => setCurrentStep(BuildStep.COMPLIANCE)}
-            className="px-8 py-2 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors marathi"
+            className="px-8 py-2 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-100 marathi"
           >
             पुढे चला (Next)
           </button>
@@ -275,7 +338,7 @@ const App: React.FC = () => {
   );
 
   const renderCompliance = () => (
-    <div className="max-w-3xl mx-auto mt-12 bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-100">
+    <div className="max-w-3xl mx-auto mt-12 bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-100 px-4">
       <div className="bg-emerald-600 px-8 py-6 text-white flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold marathi">Google Play तपासणी</h2>
@@ -302,7 +365,7 @@ const App: React.FC = () => {
         ))}
 
         <div className="mt-8 p-4 bg-amber-50 border border-amber-100 rounded-xl flex items-center gap-3">
-          <AlertCircle className="w-6 h-6 text-amber-500" />
+          <AlertCircle className="w-6 h-6 text-amber-500 flex-shrink-0" />
           <p className="text-sm text-amber-800 marathi">नोंद: ॲप पब्लिश करण्यासाठी तुम्हाला स्वतःचे कीस्टोअर (Signing Key) वापरावे लागेल.</p>
         </div>
       </div>
@@ -321,7 +384,7 @@ const App: React.FC = () => {
   );
 
   const renderBuilding = () => (
-    <div className="max-w-2xl mx-auto mt-20 text-center">
+    <div className="max-w-2xl mx-auto mt-20 text-center px-4">
       <div className="relative inline-block mb-8">
         <div className="w-32 h-32 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
         <Cpu className="w-12 h-12 text-indigo-600 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
@@ -335,7 +398,7 @@ const App: React.FC = () => {
   );
 
   const renderExport = () => (
-    <div className="max-w-4xl mx-auto mt-12 mb-20">
+    <div className="max-w-4xl mx-auto mt-12 mb-20 px-4">
       <div className="bg-white rounded-3xl shadow-2xl overflow-hidden border border-gray-100">
         <div className="bg-gray-900 px-8 py-8 text-white text-center">
           <div className="mb-4 inline-block p-4 bg-green-500/20 rounded-full">
@@ -347,15 +410,15 @@ const App: React.FC = () => {
 
         <div className="p-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
-            <button className="flex items-center justify-between p-6 bg-indigo-50 border-2 border-indigo-600 rounded-2xl group transition-all">
-              <div className="text-left">
+            <button className="flex items-center justify-between p-6 bg-indigo-50 border-2 border-indigo-600 rounded-2xl group transition-all text-left">
+              <div>
                 <h3 className="text-lg font-bold text-indigo-900 marathi">APK डाउनलोड करा</h3>
                 <p className="text-xs text-indigo-600">Testing version for devices</p>
               </div>
               <Download className="w-8 h-8 text-indigo-600 group-hover:bounce transition-all" />
             </button>
-            <button className="flex items-center justify-between p-6 bg-emerald-50 border-2 border-emerald-600 rounded-2xl group transition-all">
-              <div className="text-left">
+            <button className="flex items-center justify-between p-6 bg-emerald-50 border-2 border-emerald-600 rounded-2xl group transition-all text-left">
+              <div>
                 <h3 className="text-lg font-bold text-emerald-900 marathi">AAB डाउनलोड करा</h3>
                 <p className="text-xs text-emerald-600">Play Store release version</p>
               </div>
@@ -369,17 +432,17 @@ const App: React.FC = () => {
               Android प्रकल्प कोड (Project Files)
             </h3>
             <div className="space-y-4">
-              <div className="bg-gray-900 text-gray-300 p-6 rounded-xl font-mono text-sm overflow-x-auto max-h-60 scrollbar-thin scrollbar-thumb-gray-700">
+              <div className="bg-gray-900 text-gray-300 p-6 rounded-xl font-mono text-sm overflow-x-auto max-h-60">
                 <div className="flex justify-between items-center mb-4 text-gray-500 border-b border-gray-800 pb-2">
                   <span>AndroidManifest.xml</span>
-                  <button onClick={() => navigator.clipboard.writeText(buildResult?.manifestXml || '')} className="text-xs hover:text-white">Copy</button>
+                  <button onClick={() => navigator.clipboard.writeText(buildResult?.manifestXml || '')} className="text-xs hover:text-white uppercase tracking-wider">Copy</button>
                 </div>
                 <pre>{buildResult?.manifestXml}</pre>
               </div>
-              <div className="bg-gray-900 text-gray-300 p-6 rounded-xl font-mono text-sm overflow-x-auto max-h-60 scrollbar-thin scrollbar-thumb-gray-700">
+              <div className="bg-gray-900 text-gray-300 p-6 rounded-xl font-mono text-sm overflow-x-auto max-h-60">
                 <div className="flex justify-between items-center mb-4 text-gray-500 border-b border-gray-800 pb-2">
                   <span>build.gradle (Module: app)</span>
-                  <button onClick={() => navigator.clipboard.writeText(buildResult?.gradleConfig || '')} className="text-xs hover:text-white">Copy</button>
+                  <button onClick={() => navigator.clipboard.writeText(buildResult?.gradleConfig || '')} className="text-xs hover:text-white uppercase tracking-wider">Copy</button>
                 </div>
                 <pre>{buildResult?.gradleConfig}</pre>
               </div>
@@ -393,7 +456,7 @@ const App: React.FC = () => {
               setCurrentStep(BuildStep.WELCOME);
               setUrl('');
             }}
-            className="px-8 py-3 bg-gray-200 text-gray-700 rounded-xl font-bold hover:bg-gray-300 transition-colors marathi"
+            className="px-8 py-3 bg-gray-200 text-gray-700 rounded-xl font-bold hover:bg-gray-300 transition-colors marathi shadow-sm"
           >
             नवीन प्रोजेक्ट सुरू करा
           </button>
@@ -403,30 +466,28 @@ const App: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen pb-12">
-      {/* Navigation Bar */}
-      <nav className="bg-white border-b border-gray-100 px-6 py-4 sticky top-0 z-50">
+    <div className="min-h-screen pb-12 bg-slate-50/50">
+      <nav className="bg-white border-b border-gray-100 px-6 py-4 sticky top-0 z-50 shadow-sm">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center">
+            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200">
               <Smartphone className="text-white w-6 h-6" />
             </div>
             <span className="text-xl font-bold text-gray-900 tracking-tight marathi">PWA बिल्डर</span>
           </div>
-          <div className="hidden md:flex items-center gap-8">
-            <div className={`text-sm font-medium transition-colors ${currentStep === BuildStep.URL_INPUT ? 'text-indigo-600' : 'text-gray-400'} marathi`}>१. लिंक टाका</div>
+          <div className="hidden lg:flex items-center gap-6">
+            <StepIndicator current={currentStep} step={BuildStep.URL_INPUT} label="१. लिंक टाका" />
             <ArrowRight className="w-4 h-4 text-gray-300" />
-            <div className={`text-sm font-medium transition-colors ${currentStep === BuildStep.APP_CONFIG ? 'text-indigo-600' : 'text-gray-400'} marathi`}>२. माहिती भरा</div>
+            <StepIndicator current={currentStep} step={BuildStep.APP_CONFIG} label="२. माहिती भरा" />
             <ArrowRight className="w-4 h-4 text-gray-300" />
-            <div className={`text-sm font-medium transition-colors ${currentStep === BuildStep.COMPLIANCE ? 'text-indigo-600' : 'text-gray-400'} marathi`}>३. सुरक्षा तपासणी</div>
+            <StepIndicator current={currentStep} step={BuildStep.COMPLIANCE} label="३. तपासणी" />
             <ArrowRight className="w-4 h-4 text-gray-300" />
-            <div className={`text-sm font-medium transition-colors ${currentStep === BuildStep.EXPORT ? 'text-indigo-600' : 'text-gray-400'} marathi`}>४. डाउनलोड</div>
+            <StepIndicator current={currentStep} step={BuildStep.EXPORT} label="४. डाउनलोड" />
           </div>
         </div>
       </nav>
 
-      {/* Content Render */}
-      <div className="px-6">
+      <div className="px-4">
         {currentStep === BuildStep.WELCOME && renderWelcome()}
         {currentStep === BuildStep.URL_INPUT && renderUrlInput()}
         {currentStep === BuildStep.APP_CONFIG && renderAppConfig()}
@@ -435,22 +496,30 @@ const App: React.FC = () => {
         {currentStep === BuildStep.EXPORT && renderExport()}
       </div>
 
-      {/* Footer Info (Marathi) */}
       {currentStep === BuildStep.WELCOME && (
-        <div className="max-w-4xl mx-auto mt-20 p-8 bg-indigo-900 rounded-3xl text-white">
-          <h2 className="text-2xl font-bold mb-4 marathi">का वापरावे?</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div className="max-w-4xl mx-auto mt-20 p-8 bg-indigo-900 rounded-3xl text-white shadow-2xl shadow-indigo-200 mx-4">
+          <h2 className="text-2xl font-bold mb-8 marathi text-indigo-100">हे ॲप का वापरावे?</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
             <div>
+              <div className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center mb-4">
+                <ShieldCheck className="text-indigo-300" />
+              </div>
               <h4 className="font-bold text-indigo-300 mb-2 marathi">१००% सुरक्षित</h4>
-              <p className="text-sm opacity-80">तुमचा कोणताही डेटा आमच्याकडे साठवला जात नाही.</p>
+              <p className="text-sm opacity-80 marathi">तुमचा कोणताही डेटा आमच्याकडे साठवला जात नाही. सर्वकाही तुमच्या सिस्टमवर घडते.</p>
             </div>
             <div>
+              <div className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center mb-4">
+                <Globe className="text-indigo-300" />
+              </div>
               <h4 className="font-bold text-indigo-300 mb-2 marathi">मराठी इंटरफेस</h4>
-              <p className="text-sm opacity-80">सोप्या मराठी भाषेत सर्व स्टेप्स उपलब्ध.</p>
+              <p className="text-sm opacity-80 marathi">सोप्या मराठी भाषेत सर्व स्टेप्स उपलब्ध आहेत, जेणेकरून कोणालाही वापरता येईल.</p>
             </div>
             <div>
+              <div className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center mb-4">
+                <CheckCircle2 className="text-indigo-300" />
+              </div>
               <h4 className="font-bold text-indigo-300 mb-2 marathi">प्ले स्टोअर रेडी</h4>
-              <p className="text-sm opacity-80">आम्ही कडक Google Play नियमांचे पालन करतो.</p>
+              <p className="text-sm opacity-80 marathi">आम्ही कडक Google Play नियमांचे आणि TWA मानकांचे पालन करतो.</p>
             </div>
           </div>
         </div>
@@ -458,5 +527,12 @@ const App: React.FC = () => {
     </div>
   );
 };
+
+const StepIndicator = ({ current, step, label }: { current: BuildStep, step: BuildStep, label: string }) => (
+  <div className={`text-sm font-semibold transition-all flex items-center gap-2 ${current === step ? 'text-indigo-600 scale-105' : 'text-gray-400'}`}>
+    <div className={`w-2 h-2 rounded-full ${current === step ? 'bg-indigo-600 animate-pulse' : 'bg-gray-200'}`} />
+    <span className="marathi">{label}</span>
+  </div>
+);
 
 export default App;

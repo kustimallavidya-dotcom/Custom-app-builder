@@ -2,20 +2,15 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { PwaMetadata, AppConfig, BuildResult } from "./types";
 
-// Netlify वर process.env न मिळाल्यास ॲप क्रॅश होऊ नये म्हणून हा बदल
 const getApiKey = () => {
-  try {
-    return process.env.API_KEY || "";
-  } catch (e) {
-    console.warn("API Key environment variable not found.");
-    return "";
-  }
+  // process.env.API_KEY is automatically provided by Netlify if configured in environment variables
+  return process.env.API_KEY || "";
 };
 
 export const analyzePwaUrl = async (url: string): Promise<PwaMetadata> => {
   const apiKey = getApiKey();
   if (!apiKey) {
-    throw new Error("API Key उपलब्ध नाही. कृपया Netlify Settings मध्ये API_KEY सेट करा.");
+    throw new Error("API_KEY_MISSING");
   }
 
   const ai = new GoogleGenAI({ apiKey });
@@ -57,6 +52,8 @@ export const analyzePwaUrl = async (url: string): Promise<PwaMetadata> => {
 
 export const generateAndroidProject = async (config: AppConfig, pwa: PwaMetadata): Promise<BuildResult> => {
   const apiKey = getApiKey();
+  if (!apiKey) throw new Error("API_KEY_MISSING");
+
   const ai = new GoogleGenAI({ apiKey });
   
   const response = await ai.models.generateContent({
