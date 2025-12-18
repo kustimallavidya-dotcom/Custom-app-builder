@@ -1,0 +1,5 @@
+{
+  "name": "PWA-to-Android Architect (PWA बिल्डर)",
+  "description": "A professional tool for converting Progressive Web Apps into Google Play compliant APK and AAB packages using Trusted Web Activity (TWA) architecture. Designed for personal business use with a Marathi-first interface.",
+  "requestFramePermissions": []
+}
